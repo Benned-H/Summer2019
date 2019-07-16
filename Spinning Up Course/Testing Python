@@ -1,8 +1,0 @@
-"""
-Test Python3 file to check my system's Python.
-"""
-def main():
-	print("Hello world")
-
-if (__name__ == "__main__"):
-	main()
