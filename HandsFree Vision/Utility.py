@@ -10,7 +10,7 @@ from time import sleep
 import numpy as np
 import PIL.Image
 
-def setupCamera(resolution=(640,400)):
+def setupCamera(resolution=(640,416)):
     # Returns a camera with specified settings.
     camera = PiCamera() # Instance of the main class of picamera.
     camera.rotation = 180 # Rotates image so it's right-side up.
@@ -26,26 +26,40 @@ def preview(camera, seconds=2):
     sleep(seconds)
     camera.stop_preview()
 
-def createBox(h,w,border=1):
-    rgba = np.zeros([h,w,4], dtype=np.uint8)
-
-    # Fill in red outline
-    rgba[0:border,:] = [255,0,0,255]
-    rgba[h-border-1:h-1,:] = [255,0,0,255]
-    rgba[:,0:border] = [255,0,0,255]
-    rgba[:,w-border-1:w-1] = [255,0,0,255]
-  
-    return rgba
+def addBox(mask,r,c,h,w):
+    """Adds a red box to the given mask at [r,c]
+    with height h and width w."""
+    if w < 2 or h < 2:
+        print("Invalid input: Box dimension < 2.")
+        return mask
+    if r < 0 or r >= mask.shape[0] or r + h >= mask.shape[0]:
+        print("Invalid input: Row out of bounds.")
+        return mask
+    if c < 0 or c >= mask.shape[1] or c + w >= mask.shape[1]:
+        print("Invalid input: Column out of bounds.")
+        return mask
     
-def test(camera):
-    a = np.zeros((32,32,3), dtype=np.uint8)
-    a[16,:,:] = 255
-    a[:,16,:] = 255
-    a_img = PIL.Image.fromarray(a)
+    pixel_val = [255,0,0]
+    print(mask.shape)
+    mask[r,c:c+w] = pixel_val # Top side.
+    #mask[r+1,c:c+w] = pixel_val
+    mask[r+h,c:c+w] = pixel_val # Bottom side.
+    #mask[r+h-1,c:c+w] = pixel_val
+    mask[r:r+h,c] = pixel_val # Left side.
+    #mask[r:r+h,c+1] = pixel_val
+    mask[r:r+h,c+w] = pixel_val # Right side.
+    #mask[r:r+h,c+w-1] = pixel_val
+    return mask
+    
+def createMask(camera,r,c,h,w):
+    res = camera.resolution
+    mask = np.zeros((res[0],res[1],3), dtype=np.uint8)
+    mask = addBox(mask,r,c,h,w)
+    mask_img = PIL.Image.fromarray(mask)
     
     camera.start_preview(alpha=225)
-    o = camera.add_overlay(a_img.tobytes(), size = a_img.size,
+    o = camera.add_overlay(mask_img.tobytes(), size = res,
                            layer = 3, alpha = 60)
-    sleep(2)
+    sleep(10)
     camera.stop_preview()
     camera.remove_overlay(o)
