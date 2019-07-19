@@ -74,3 +74,111 @@ def showMask(camera,mask_img,seconds=2):
     sleep(seconds)
     camera.stop_preview()
     camera.remove_overlay(o)
+    
+def adjustMask(camera,mask_img,bb_h,bb_w,bb_r,bb_c):
+    # A user interface for editing the mask.
+    save_text = camera.annotate_text
+    
+    w = camera.resolution[0]
+    h = camera.resolution[1]
+    step = 50 # Will decrease as user narrows in on goal.
+    size_step = 10
+    
+    camera.start_preview(alpha=225)
+    o = camera.add_overlay(mask_img.tobytes(), size = mask_img.size,
+                           layer = 3, alpha = 10)
+    
+    while (True):
+        camera.annotate_text = "Input WASD/E/R to move/enlarge/reduce box."
+        instr = input().lower()
+        if instr == "w": # Move box up.
+            if bb_r > step:
+                bb_r -= step
+            else:
+                camera.annotate_text = "Box already close to top."
+                sleep(0.5)
+                continue
+        elif instr == "a": # Move box left.
+            if bb_c > step:
+                bb_c -= step
+            else:
+                camera.annotate_text = "Box already close to left side."
+                sleep(0.5)
+                continue
+        elif instr == "s": # Move box down.
+            if (bb_r + bb_h) < (h - step):
+                bb_r += step
+            else:
+                camera.annotate_text = "Box already close to bottom."
+                sleep(0.5)
+                continue
+        elif instr == "d": # Move box right.
+            if (bb_c + bb_w) < (w - step):
+                bb_c += step
+            else:
+                camera.annotate_text = "Box already close to right side."
+                sleep(0.5)
+                continue
+        elif instr == "e": # Enlarge box.
+            changed = False
+            while (True): # Enlarge loop...
+                camera.annotate_text = "Which direction? (WASD)"
+                instr = input().lower()
+                if instr == "w":
+                    if bb_r > size_step:
+                        bb_r -= size_step
+                        bb_h += size_step
+                    else:
+                        camera.annotate_text = "No room on top."
+                        sleep(0.5)
+                        continue
+                elif instr == "a":
+                    if bb_c > size_step:
+                        bb_c -= size_step
+                        bb_w += size_step
+                    else:
+                        camera.annotate_text = "No room on left."
+                        sleep(0.5)
+                        continue
+                elif instr == "s":
+                    if (bb_r + bb_h) < (h - size_step):
+                        bb_h += size_step
+                    else:
+                        camera.annotate_text = "No room on bottom."
+                        sleep(0.5)
+                        continue
+                elif instr == "d":
+                    if (bb_c + bb_w) < (w - size_step):
+                        bb_w += size_step
+                    else:
+                        camera.annotate_text = "No room on right."
+                        sleep(0.5)
+                        continue
+                elif instr == "q":
+                    break # Exit the enlarge loop.
+                else:
+                    camera.annotate_text = "Input not recognized."
+                    sleep(0.5)
+                    continue
+                
+                # If we reach here, changes were made.
+                changed = True
+                mask_img = createMask(camera,bb_r,bb_c,bb_h,bb_w)
+                camera.remove_overlay(o)
+                o = camera.add_overlay(mask_img.tobytes(), size = mask_img.size,
+                           layer = 3, alpha = 10)
+            continue # Enlarge can always exit to top of main loop.
+        else:
+            camera.annotate_text = "Input not recognized."
+            sleep(0.5)
+            continue
+        # If we reach here, the mask should be changed.
+        mask_img = createMask(camera,bb_r,bb_c,bb_h,bb_w)
+        camera.remove_overlay(o)
+        o = camera.add_overlay(mask_img.tobytes(), size = mask_img.size,
+                           layer = 3, alpha = 10)
+    
+    # Reset camera as-was.
+    camera.stop_preview()
+    camera.remove_overlay(o)
+    camera.annotate_text = save_text

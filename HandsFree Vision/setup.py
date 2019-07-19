@@ -1,7 +1,7 @@
 """
 The main method for the hand segmentation process.
 Author: Benned Hedegaard
-Last revised: 7/17/2019
+Last revised: 7/19/2019
 """
 import Utility as util
 
@@ -9,12 +9,12 @@ def main():
     camera = util.setupCamera()
     bb_h = 100 # Bounding box height, width
     bb_w = 100
-    bb_r = 0
-    bb_c = 0
+    bb_r = 100
+    bb_c = 100
     mask = None
     
     while (True):
-        instr = input("What should we do?\n* 1 - Adjust bounding boxes\n* 2 - Adjust resolution\n* 3 - Ready\n* q - Quit program\n")
+        instr = input("What should we do?\n* 1 - Adjust bounding boxes\n* 2 - Ready\n* q - Quit program\n")
         if instr == "q":
             print("Program terminated")
             break
@@ -24,10 +24,18 @@ def main():
             # Adjust the bounding boxes.
             util.previewText(camera,"Here's the current bounding box:",1)
             if mask == None:
-                print("good")
                 mask = util.createMask(camera,bb_r,bb_c,bb_h,bb_w)
             util.showMask(camera,mask)
-            input("Should we adjust this placement or size? (y/n) \n")
+            instr = input("Should we adjust this box? (y/n) \n")
+            if instr == "y":
+                output = util.adjustMask(camera,mask,bb_h,bb_w,bb_r,bb_c)
+            elif instr == "n":
+                print("\nOk, sounds good.")
+        elif instr == "2":
+            # Ready case.
+            continue
+        else:
+            print("\nInput not recognized. Please try again.")
             continue
 
 if __name__ == "__main__":
