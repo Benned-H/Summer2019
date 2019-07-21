@@ -1,9 +1,9 @@
 """
-All the miscellaneous functions needed
+All miscellaneous functions needed
 for the entire hand segmentation workflow.
 
 Author: Benned Hedegaard
-Last Revised: 7/17/2019
+Last Revised: 7/20/2019
 """
 from picamera import PiCamera
 from time import sleep
@@ -35,8 +35,8 @@ def previewText(camera,text,seconds=2):
     camera.annotate_text = save_text
 
 def addBox(mask,r,c,h,w):
-    """Adds a red box to the given mask at [r,c]
-    with height h and width w."""
+    """Adds a red box to given mask at [r,c]
+    with height h, width w."""
     if w < 2 or h < 2:
         print("Invalid input: Box dimension < 2.")
         return mask
@@ -48,7 +48,6 @@ def addBox(mask,r,c,h,w):
         return mask
     
     pixel_val = [255,0,0,255]
-    print(mask.shape)
     mask[r,c:c+w] = pixel_val # Top side.
     mask[r+1,c:c+w] = pixel_val
     mask[r+h,c:c+w] = pixel_val # Bottom side.
@@ -78,20 +77,43 @@ def showMask(camera,mask_img,seconds=2):
 def adjustMask(camera,mask_img,bb_h,bb_w,bb_r,bb_c):
     # A user interface for editing the mask.
     save_text = camera.annotate_text
+    text_size = camera.annotate_text_size
     
     w = camera.resolution[0]
     h = camera.resolution[1]
     step = 50 # Will decrease as user narrows in on goal.
     size_step = 10
     
-    camera.start_preview(alpha=225)
+    camera.annotate_text = "Should we adjust this box? (Y/N)"
     o = camera.add_overlay(mask_img.tobytes(), size = mask_img.size,
-                           layer = 3, alpha = 10)
+                layer = 3, alpha = 10)
+    camera.start_preview(alpha=225) # alpha adjusts transparency 0-255
     
     while (True):
-        camera.annotate_text = "Input WASD/E/R to move/enlarge/reduce box."
         instr = input().lower()
-        if instr == "w": # Move box up.
+    
+        if instr == "n":
+            camera.annotate_text = "Ok, sounds good."
+            sleep(3)
+            # Reset camera as-was.
+            camera.stop_preview()
+            camera.remove_overlay(o)
+            camera.annotate_text = save_text
+            camera.annotate_text_size = text_size
+            return mask_img
+        elif instr == "y":
+            break
+        else:
+            camera.annotate_text = "Input not recognized."
+            sleep(0.5)
+            continue
+    
+    while (True):
+        camera.annotate_text = "Move box: (WASD, C to continue)"
+        instr = input().lower()
+        if instr == "c":
+            break # Exit the move loop.
+        elif instr == "w": # Move box up.
             if bb_r > step:
                 bb_r -= step
             else:
@@ -119,55 +141,6 @@ def adjustMask(camera,mask_img,bb_h,bb_w,bb_r,bb_c):
                 camera.annotate_text = "Box already close to right side."
                 sleep(0.5)
                 continue
-        elif instr == "e": # Enlarge box.
-            changed = False
-            while (True): # Enlarge loop...
-                camera.annotate_text = "Which direction? (WASD)"
-                instr = input().lower()
-                if instr == "w":
-                    if bb_r > size_step:
-                        bb_r -= size_step
-                        bb_h += size_step
-                    else:
-                        camera.annotate_text = "No room on top."
-                        sleep(0.5)
-                        continue
-                elif instr == "a":
-                    if bb_c > size_step:
-                        bb_c -= size_step
-                        bb_w += size_step
-                    else:
-                        camera.annotate_text = "No room on left."
-                        sleep(0.5)
-                        continue
-                elif instr == "s":
-                    if (bb_r + bb_h) < (h - size_step):
-                        bb_h += size_step
-                    else:
-                        camera.annotate_text = "No room on bottom."
-                        sleep(0.5)
-                        continue
-                elif instr == "d":
-                    if (bb_c + bb_w) < (w - size_step):
-                        bb_w += size_step
-                    else:
-                        camera.annotate_text = "No room on right."
-                        sleep(0.5)
-                        continue
-                elif instr == "q":
-                    break # Exit the enlarge loop.
-                else:
-                    camera.annotate_text = "Input not recognized."
-                    sleep(0.5)
-                    continue
-                
-                # If we reach here, changes were made.
-                changed = True
-                mask_img = createMask(camera,bb_r,bb_c,bb_h,bb_w)
-                camera.remove_overlay(o)
-                o = camera.add_overlay(mask_img.tobytes(), size = mask_img.size,
-                           layer = 3, alpha = 10)
-            continue # Enlarge can always exit to top of main loop.
         else:
             camera.annotate_text = "Input not recognized."
             sleep(0.5)
@@ -177,8 +150,115 @@ def adjustMask(camera,mask_img,bb_h,bb_w,bb_r,bb_c):
         camera.remove_overlay(o)
         o = camera.add_overlay(mask_img.tobytes(), size = mask_img.size,
                            layer = 3, alpha = 10)
-    
+        
+    while (True):
+        camera.annotate_text_size = 24
+        camera.annotate_text = "Input E/R to enlarge/reduce box. (C to continue)"
+        instr = input().lower()
+        if instr == "c":
+            camera.annotate_text_size = 32
+            break # Exit the size loop.
+        elif instr == "e": # Enlarge box.
+                while (True): # Enlarge loop...
+                    camera.annotate_text = "Which direction? (WASD, C to continue)"
+                    instr = input().lower()
+                    if instr == "c":
+                        break # Exit the enlarge loop.
+                    elif instr == "w": # Enlarge upwards.
+                        if bb_r > size_step:
+                            bb_r -= size_step
+                            bb_h += size_step
+                        else:
+                            camera.annotate_text = "No room on top."
+                            sleep(0.5)
+                            continue
+                    elif instr == "a": # Enlarge to the left.
+                        if bb_c > size_step:
+                            bb_c -= size_step
+                            bb_w += size_step
+                        else:
+                            camera.annotate_text = "No room on left."
+                            sleep(0.5)
+                            continue
+                    elif instr == "s": # Enlarge downwards.
+                        if (bb_r + bb_h) < (h - size_step):
+                            bb_h += size_step
+                        else:
+                            camera.annotate_text = "No room on bottom."
+                            sleep(0.5)
+                            continue
+                    elif instr == "d": # Enlarge to the right.
+                        if (bb_c + bb_w) < (w - size_step):
+                            bb_w += size_step
+                        else:
+                            camera.annotate_text = "No room on right."
+                            sleep(0.5)
+                            continue
+                    else:
+                        camera.annotate_text = "Input not recognized."
+                        sleep(0.5)
+                        continue
+                    
+                    # If we reach here, changes were made.
+                    mask_img = createMask(camera,bb_r,bb_c,bb_h,bb_w)
+                    camera.remove_overlay(o)
+                    o = camera.add_overlay(mask_img.tobytes(), size = mask_img.size,
+                               layer = 3, alpha = 10)
+                continue # Enlarge always exits to top of size loop.
+        elif instr == "r": # Reduce box.
+                while (True): # Reduce loop...
+                    camera.annotate_text = "Which direction? (WASD, C to continue)"
+                    instr = input().lower()
+                    if instr == "c":
+                        break # Exit the reduce loop.
+                    elif instr == "w": # Reduce from top.
+                        if bb_h > size_step:
+                            bb_r += size_step
+                            bb_h -= size_step
+                        else:
+                            camera.annotate_text = "No room from top."
+                            sleep(0.5)
+                            continue
+                    elif instr == "a": # Reduce from the left.
+                        if bb_w > size_step:
+                            bb_c += size_step
+                            bb_w -= size_step
+                        else:
+                            camera.annotate_text = "No room from left."
+                            sleep(0.5)
+                            continue
+                    elif instr == "s": # Reduce from the bottom.
+                        if bb_h > size_step:
+                            bb_h -= size_step
+                        else:
+                            camera.annotate_text = "No room from bottom."
+                            sleep(0.5)
+                            continue
+                    elif instr == "d": # Reduce from the right.
+                        if bb_w > size_step:
+                            bb_w -= size_step
+                        else:
+                            camera.annotate_text = "No room from right."
+                            sleep(0.5)
+                            continue
+                    else:
+                        camera.annotate_text = "Input not recognized."
+                        sleep(0.5)
+                        continue
+                    
+                    # If we reach here, changes were made.
+                    mask_img = createMask(camera,bb_r,bb_c,bb_h,bb_w)
+                    camera.remove_overlay(o)
+                    o = camera.add_overlay(mask_img.tobytes(), size = mask_img.size,
+                               layer = 3, alpha = 10)
+                continue # Reduce always exits to top of size loop.
+        else:
+            camera.annotate_text = "Input not recognized."
+            sleep(0.5)
+            continue
+        
     # Reset camera as-was.
     camera.stop_preview()
     camera.remove_overlay(o)
     camera.annotate_text = save_text
+    camera.annotate_text_size = text_size
