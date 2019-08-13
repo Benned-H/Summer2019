@@ -1,7 +1,7 @@
 """
 The main method for the hand segmentation process.
 Author: Benned Hedegaard
-Last revised: 8/5/2019
+Last revised: 8/7/2019
 """
 from picamera import PiCamera
 import picamera.array
@@ -19,19 +19,6 @@ def setupCamera(resolution=(640,416)):
     if resolution[0] == 2592 and resolution[1] == 1944:
         camera.framerate = 15
     return camera
-
-def preview(camera, seconds=2):
-    camera.start_preview(alpha=225) # alpha adjusts transparency 0-255
-    sleep(seconds)
-    camera.stop_preview()
-    
-def previewText(camera,text,seconds=2):
-    save_text = camera.annotate_text
-    camera.annotate_text = text
-    camera.start_preview(alpha=225) # alpha adjusts transparency 0-255
-    sleep(seconds)
-    camera.stop_preview()
-    camera.annotate_text = save_text
 
 def addBox(mask,r,c,h,w):
     """Adds a red box to given mask at [r,c]
@@ -66,14 +53,6 @@ def createMask(camera,bb_r,bb_c,bb_h,bb_w):
     # mask_img.save("test.png")
     return mask_img
 
-def showMask(camera,mask_img,seconds=2):
-    camera.start_preview(alpha=225)
-    o = camera.add_overlay(mask_img.tobytes(), size = mask_img.size,
-                           layer = 3, alpha = 10)
-    sleep(seconds)
-    camera.stop_preview()
-    camera.remove_overlay(o)
-    
 def adjustMask(camera,box):
     # A user interface for editing the box.
     save_text = camera.annotate_text
@@ -271,12 +250,6 @@ def adjustMask(camera,box):
     
     return [bb_r,bb_c,bb_h,bb_w]
 
-def takePicture(camera, filepath):
-    camera.start_preview(alpha=225) # alpha adjusts transparency 0-255
-    sleep(2)
-    camera.capture(filepath)
-    camera.stop_preview()
-
 def captureROI(camera,box,YUV = False):
     # Captures and returns a numpy array of ROI.
     save_text = camera.annotate_text
@@ -297,8 +270,7 @@ def captureROI(camera,box,YUV = False):
     print(roi.shape)
     if YUV:
         with picamera.array.PiYUVArray(camera) as output:
-            camera.capture(output, 'yuv')
-            print(output.array.shape)
+            camera.capture(output, 'yuv', use_video_port = True)
             print("Captured %dx%d image." % (output.array.shape[1],output.array.shape[0]))
             for r in range(box[2]):
                 for c in range(box[3]):
@@ -306,8 +278,7 @@ def captureROI(camera,box,YUV = False):
                     roi[r,c] = pixel
     else:
         with picamera.array.PiRGBArray(camera) as output:
-            camera.capture(output, 'rgb')
-            print(output.array.shape)
+            camera.capture(output, 'rgb', use_video_port = True)
             print("Captured %dx%d image." % (output.array.shape[1],output.array.shape[0]))
             for r in range(box[2]):
                 for c in range(box[3]):
@@ -334,16 +305,6 @@ def getROImask(mask,bb_r,bb_c,bb_h,bb_w,v_offset,h_offset,scale):
     mask_copy[img_r+(bb_h*scale),img_c:img_c+(bb_w*scale)] = edge
     return Image.fromarray(mask_copy)
 
-def overlayText(camera,text,size=20,duration=0.5):
-    # Overlays the given text onscreen for given duration.
-    img = getTextImg(camera,text,size)
-    
-    o = camera.add_overlay(img.tobytes(), size = img.size,
-                layer = 3, alpha = 225)
-    sleep(duration)
-    camera.remove_overlay(o)
-    return
-
 def getTextImg(camera,text,size):
     res = camera.resolution # This will be columns by rows.
     img = Image.new("RGBA", res, color=(0,0,0,0))
@@ -353,6 +314,16 @@ def getTextImg(camera,text,size):
     d.text((10,10), text, font=fnt, fill=(255,255,255,255))
     
     return img
+
+def overlayText(camera,text,size=32,duration=0.5):
+    # Overlays the given text onscreen for given duration.
+    img = getTextImg(camera,text,size)
+    
+    o = camera.add_overlay(img.tobytes(), size = img.size,
+                layer = 3, alpha = 225)
+    sleep(duration)
+    camera.remove_overlay(o)
+    return
 
 def prompt(camera,text,size=32):
     t_img = getTextImg(camera,text,size)
@@ -412,10 +383,10 @@ def getSample(camera,roi):
     
     o = camera.add_overlay(mask_img.tobytes(), size = mask_img.size,
                 layer = 2, alpha = 225)
-    overlayText(camera,"Time to zoom in on only pixels of skin.",32,3)
+    overlayText(camera,"Time to zoom in on only pixels of skin.",32,2)
 
     while (True):
-        instr = prompt(camera,"Input E/R to enlarge/reduce box. (C to continue)",32)
+        instr = prompt(camera,"Input E/R to enlarge/reduce box. (C to continue)",24)
         if instr == "c":
             break # Exit the size loop.
         elif instr == "e": # Enlarge box.
@@ -428,29 +399,29 @@ def getSample(camera,roi):
                         bb_r -= size_step
                         bb_h += size_step
                     else:
-                        overlayText("No room on top.")
+                        overlayText(camera,"No room on top.")
                         continue
                 elif instr == "a": # Enlarge to the left.
                     if bb_c > size_step:
                         bb_c -= size_step
                         bb_w += size_step
                     else:
-                        overlayText("No room on left.")
+                        overlayText(camera,"No room on left.")
                         continue
                 elif instr == "s": # Enlarge downwards.
                     if (bb_r + bb_h) < (roi_h - size_step):
                         bb_h += size_step
                     else:
-                        overlayText("No room on bottom.")
+                        overlayText(camera,"No room on bottom.")
                         continue
                 elif instr == "d": # Enlarge to the right.
                     if (bb_c + bb_w) < (roi_w - size_step):
                         bb_w += size_step
                     else:
-                        overlayText("No room on right.")
+                        overlayText(camera,"No room on right.")
                         continue
                 else:
-                    overlayText("Input not recognized.")
+                    overlayText(camera,"Input not recognized.")
                     continue
                     
                 # If we reach here, changes were made.
@@ -469,29 +440,29 @@ def getSample(camera,roi):
                         bb_r += size_step
                         bb_h -= size_step
                     else:
-                        overlayText("No room from top.")
+                        overlayText(camera,"No room from top.")
                         continue
                 elif instr == "a": # Reduce from the left.
                     if bb_w > size_step:
                         bb_c += size_step
                         bb_w -= size_step
                     else:
-                        overlayText("No room from left.")
+                        overlayText(camera,"No room from left.")
                         continue
                 elif instr == "s": # Reduce from the bottom.
                     if bb_h > size_step:
                         bb_h -= size_step
                     else:
-                        overlayText("No room from bottom.")
+                        overlayText(camera,"No room from bottom.")
                         continue
                 elif instr == "d": # Reduce from the right.
                     if bb_w > size_step:
                         bb_w -= size_step
                     else:
-                        overlayText("No room from right.")
+                        overlayText(camera,"No room from right.")
                         continue
                 else:
-                    overlayText("Input not recognized.")
+                    overlayText(camera,"Input not recognized.")
                     continue
                     
                 # If we reach here, changes were made.
@@ -501,7 +472,7 @@ def getSample(camera,roi):
                     layer = 2, alpha = 225)
                 continue # Reduce always exits to top of size loop.
         else:
-            overlayText("Input not recognized.")
+            overlayText(camera,"Input not recognized.")
             continue
         
     # Reset camera as-was.
@@ -510,19 +481,19 @@ def getSample(camera,roi):
     camera.annotate_text = save_text
     
     # Crop and return sample.
-    sample = np.zeros((bb_r,bb_c,3))
+    sample = np.zeros((bb_h,bb_w,3), dtype=np.uint8)
     for r in range(bb_h):
         for c in range(bb_w):
-            sample[r,c] = [bb_r+r,bb_c+c]
+            pixel = roi[bb_r+r,bb_c+c]
+            sample[r,c] = pixel
     
-    sample_img = Image.fromarray(sample)
+    sample_img = Image.fromarray(np.copy(sample))
     sample_img.save("sample.png")
     return sample
 
 def main():
     camera = setupCamera()
     box = [60, 390, 200, 140] # Ordered r,c,h,w.
-    overlayText(camera,"Hello")
     while (True):
         instr = input("What should we do?\n* 1 - Adjust bounding boxes\n* 2 - Ready\n* q - Quit program\n")
         if instr == "q":
