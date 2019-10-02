@@ -1,2 +1,2 @@
 # Summer2019
-The collection of work I'm doing this summer.
+The collection of work I completed in the summer of 2019.
